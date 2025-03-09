@@ -2,13 +2,14 @@ import time
 import threading
 import pygame
 import tkinter as tk
-import keyboard  # 키보드 입력 감지 추가
+import keyboard
 from tkinter import messagebox
 
 # 타이머 실행 여부 체크 변수
 running_1min = False
 running_g_sequence = False
-start_time = None  # 타이머 시작 시간
+start_time_1min = None  # 1분 타이머 시작 시간
+start_time_g_sequence = None  # G 타이머 시작 시간
 
 def play_audio(file):
     """음성 파일 재생"""
@@ -19,58 +20,59 @@ def play_audio(file):
 def update_timer_label():
     """타이머가 동작하는 동안 UI에 타이머 상태를 업데이트"""
     if running_1min:
-        elapsed_time = time.time() - start_time
+        elapsed_time = time.time() - start_time_1min
         minutes = int(elapsed_time // 60)
         seconds = int(elapsed_time % 60)
-        timer_label.config(text=f"1분 타이머: {minutes}분 {seconds}초")
+        timer_label_1min.config(text=f"1분 타이머: {minutes}분 {seconds}초")
     if running_g_sequence:
-        elapsed_time = time.time() - start_time
+        elapsed_time = time.time() - start_time_g_sequence
         minutes = int(elapsed_time // 60)
         seconds = int(elapsed_time % 60)
-        timer_label.config(text=f"75초 + 2분 타이머: {minutes}분 {seconds}초")
+        timer_label_g_sequence.config(text=f"75초 + 2분 타이머: {minutes}분 {seconds}초")
     
     # UI 업데이트가 계속되도록 1000ms(1초) 후에 다시 호출
     window.after(1000, update_timer_label)
 
 def start_1min_timer():
     """1분 주기로 YANUS.mp3 반복 실행"""
-    global running_1min, start_time
+    global running_1min, start_time_1min
     if running_1min:
         return  # 이미 실행 중이면 무시
 
     running_1min = True
-    start_time = time.time()  # 타이머 시작 시간 기록
-    while running_1min:
-        play_audio("YANUS.mp3")  # YANUS.mp3 음성 재생
-        time.sleep(60)  # 1분 간격으로 반복 실행
-        window.update()  # UI 업데이트
+    start_time_1min = time.time()  # 타이머 시작 시간 기록
+    play_audio("YANUS.mp3")  # 첫 번째 YANUS.mp3 음성 재생
+    time.sleep(60)  # 60초 후에 두 번째 YANUS.mp3 실행
+    if running_1min:
+        play_audio("YANUS.mp3")  # 두 번째 YANUS.mp3 음성 재생
+    running_1min = False  # 타이머 종료
 
 def start_g_sequence():
     """G 버튼을 눌렀을 때, SWORD.mp3 + ERDA.mp3 반복 실행"""
-    global running_g_sequence, start_time
+    global running_g_sequence, start_time_g_sequence
     if running_g_sequence:
         return  # 이미 실행 중이면 무시
 
     running_g_sequence = True
-    start_time = time.time()  # 타이머 시작 시간 기록
+    start_time_g_sequence = time.time()  # 타이머 시작 시간 기록
     # 첫 번째 SWORD.mp3
     play_audio("SWORD.mp3")
-    timer_label.config(text="SWORD 타이머 시작")
-    window.update()
+    time.sleep(75)  # 75초 후 ERDA.mp3 실행
 
-    # 75초 후 ERDA.mp3
-    time.sleep(75)
-    while running_g_sequence:
+    if running_g_sequence:
         play_audio("ERDA.mp3")  # ERDA.mp3 음성 재생
-        time.sleep(75)  # 75초 간격으로 반복 실행
-        window.update()  # UI 업데이트
+    time.sleep(45)  # 45초 후 다시 SWORD.mp3 실행
+    if running_g_sequence:
+        play_audio("SWORD.mp3")  # 두 번째 SWORD.mp3 음성 재생
+    running_g_sequence = False  # 타이머 종료
 
 def stop_timers():
     """타이머 중지"""
     global running_1min, running_g_sequence
     running_1min = False
     running_g_sequence = False
-    timer_label.config(text="타이머 중지됨.")
+    timer_label_1min.config(text="1분 타이머 중지됨.")
+    timer_label_g_sequence.config(text="G 타이머 중지됨.")
     print("타이머가 중지되었습니다.")
 
 def handle_keypress(event):
@@ -86,20 +88,25 @@ def start_timer():
     """타이머 시작 버튼 클릭 시 호출되는 함수"""
     start_button.pack_forget()  # 타이머 시작 버튼 숨기기
     keyboard.hook(handle_keypress)  # 키보드 입력 감지 시작
-    timer_label.config(text="타이머 대기 중...")  # 타이머 대기 상태로 텍스트 변경
+    timer_label_1min.config(text="1분 타이머 대기 중...")  # 1분 타이머 대기 상태로 텍스트 변경
+    timer_label_g_sequence.config(text="G 타이머 대기 중...")  # G 타이머 대기 상태로 텍스트 변경
 
     update_timer_label()  # 타이머 상태 업데이트 함수 호출
 
 # GUI 구성
 window = tk.Tk()
 window.title("hunt_timer")
-window.geometry("300x200")  # 창 크기 설정
+window.geometry("300x250")  # 창 크기 설정
 
 # 창 상단 아이콘 설정
 window.iconphoto(True, tk.PhotoImage(file="./mainIcon.png"))  # your_icon.png 파일을 아이콘으로 사용
 
-timer_label = tk.Label(window, text="Made for 빡법사", font=("Arial", 12))
-timer_label.pack(pady=10)
+# 타이머 상태 표시 레이블 (각각 1분 타이머와 G 타이머)
+timer_label_1min = tk.Label(window, text="1분 타이머 대기 중...", font=("Arial", 12))
+timer_label_1min.pack(pady=10)
+
+timer_label_g_sequence = tk.Label(window, text="G 타이머 대기 중...", font=("Arial", 12))
+timer_label_g_sequence.pack(pady=10)
 
 # 타이머 시작 버튼
 start_button = tk.Button(window, text="타이머 시작", font=("Arial", 12), command=start_timer)

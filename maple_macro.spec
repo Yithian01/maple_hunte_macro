@@ -5,7 +5,7 @@ a = Analysis(
     ['maple_macro.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[('YANUS.mp3', '.'), ('SWORD.mp3', '.'), ('ERDA.mp3', '.'), ('mainIcon.png', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -35,5 +35,4 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['mainIcon.png'],
 )
