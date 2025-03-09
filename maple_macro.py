@@ -2,8 +2,8 @@ import time
 import threading
 import pygame
 import tkinter as tk
-import keyboard
 from tkinter import messagebox
+from pynput import keyboard  # pynput 라이브러리 임포트
 
 # 타이머 실행 여부 체크 변수
 running_1min = False
@@ -11,6 +11,8 @@ running_g_sequence = False
 start_time_1min = None  # 1분 타이머 시작 시간
 start_time_g_sequence = None  # G 타이머 시작 시간
 timer_running = False  # 타이머 실행 중인지 체크하는 변수
+timer_thread_1min = None  # 1분 타이머 스레드
+timer_thread_g_sequence = None  # G 시퀀스 타이머 스레드
 
 # 기본 음량 설정 (기본값은 100%)
 volume_level = 1.0
@@ -72,24 +74,53 @@ def start_g_sequence():
     running_g_sequence = False  # 타이머 종료
 
 def stop_timers():
-    """타이머 중지"""
-    global running_1min, running_g_sequence, timer_running
+    """타이머 중지 및 모든 상태 리셋"""
+    global running_1min, running_g_sequence, timer_running, timer_thread_1min, timer_thread_g_sequence
     running_1min = False
     running_g_sequence = False
     timer_running = False  # 타이머 중지 상태로 설정
-    timer_label_1min.config(text="1분 타이머 중지됨.")
-    timer_label_g_sequence.config(text="G 타이머 중지됨.")
     print("타이머가 중지되었습니다.")
 
-def handle_keypress(event):
+    # 음악 멈추기
+    pygame.mixer.music.stop()  # 오디오 멈추기
+    
+    # 스레드를 별도의 스레드에서 종료
+    def stop_thread():
+        # 타이머 스레드 종료 대기
+        if timer_thread_1min and timer_thread_1min.is_alive():
+            timer_thread_1min.join()
+        if timer_thread_g_sequence and timer_thread_g_sequence.is_alive():
+            timer_thread_g_sequence.join()
+        
+        # 타이머 상태 텍스트 초기화
+        window.after(0, lambda: timer_label_1min.config(text="1분 타이머 대기 중..."))
+        window.after(0, lambda: timer_label_g_sequence.config(text="G 타이머 대기 중..."))
+        
+        # 버튼 상태 리셋 (시작 버튼 보이게 하고 중지 버튼 숨기기)
+        window.after(0, lambda: start_button.grid(row=4, column=0, pady=10, padx=10, sticky="ew"))  # '시작' 버튼 보이게 하기
+        window.after(0, lambda: stop_button.grid_forget())  # '중지' 버튼 숨기기
+
+    threading.Thread(target=stop_thread, daemon=True).start()  # 타이머 중지 스레드 실행
+
+def on_press(key):
     """키 입력 감지 후 타이머 실행"""
-    global running_1min, running_g_sequence, timer_running
-    key = event.name.lower()  # 대소문자 구분 없이 처리
-    if timer_running:  # 타이머가 실행 중일 때만 입력을 처리
-        if key == 'y' and not running_1min:
-            threading.Thread(target=start_1min_timer, daemon=True).start()  # Y 눌렀을 때 1분 타이머 시작
-        elif key == 'g' and not running_g_sequence:
-            threading.Thread(target=start_g_sequence, daemon=True).start()  # G 눌렀을 때 75초 + 2분 타이머 시작
+    global running_1min, running_g_sequence, timer_running, timer_thread_1min, timer_thread_g_sequence
+    try:
+        if timer_running:  # 타이머가 실행 중일 때만 입력을 처리
+            if key.char == 'y' and not running_1min:
+                timer_thread_1min = threading.Thread(target=start_1min_timer, daemon=True)
+                timer_thread_1min.start()  # Y 눌렀을 때 1분 타이머 시작
+            elif key.char == 'g' and not running_g_sequence:
+                timer_thread_g_sequence = threading.Thread(target=start_g_sequence, daemon=True)
+                timer_thread_g_sequence.start()  # G 눌렀을 때 75초 + 2분 타이머 시작
+    except AttributeError:
+        pass  # 특수 키는 무시
+
+def on_release(key):
+    """키를 눌렀을 때 아무 작업도 하지 않도록 설정"""
+    if key == keyboard.Key.esc:
+        # ESC 키를 눌렀을 때 프로그램 종료
+        return False  # 리스너 종료
 
 def update_volume(val):
     """슬라이더 값에 따라 음량 조절"""
@@ -101,23 +132,26 @@ def start_timer():
     """타이머 시작 함수"""
     global timer_running
     timer_running = True  # 타이머 실행 상태로 설정
-    keyboard.hook(handle_keypress)  # 키보드 입력 감지 시작
+    listener = keyboard.Listener(on_press=on_press, on_release=on_release)
+    listener.start()  # 키보드 입력 감지 시작
     timer_label_1min.config(text="1분 타이머 대기 중...")  # 1분 타이머 대기 상태로 텍스트 변경
     timer_label_g_sequence.config(text="G 타이머 대기 중...")  # G 타이머 대기 상태로 텍스트 변경
 
     update_timer_label()  # 타이머 상태 업데이트 함수 호출
 
 def stop_timer_button():
-    """타이머 시작 버튼을 눌렀을 때의 중지 함수"""
+    """타이머 중지 버튼을 눌렀을 때의 중지 함수"""
     stop_timers()
-    start_button.grid(row=4, column=0, pady=10, padx=10, sticky="ew")  # 중지 후, '시작' 버튼 보이게 하기
+    # 중지 버튼 클릭 시 '시작' 버튼 보이게 하고, '중지' 버튼 숨기기
+    start_button.grid(row=4, column=0, pady=10, padx=10, sticky="ew")
     stop_button.grid_forget()  # '중지' 버튼 숨기기
 
 def start_button_function():
     """타이머 시작 버튼을 눌렀을 때의 함수"""
-    start_button.grid_forget()  # '시작' 버튼 숨기기
+    # start_button.grid_forget()  # 이 줄을 삭제하거나 주석 처리합니다.
     stop_button.grid(row=4, column=0, pady=10, padx=10, sticky="ew")  # '중지' 버튼 보이게 하기
     start_timer()  # 타이머 시작
+
 
 # GUI 구성
 window = tk.Tk()
